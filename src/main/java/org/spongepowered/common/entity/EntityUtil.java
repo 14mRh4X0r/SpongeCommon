@@ -100,6 +100,7 @@ import org.spongepowered.common.event.tracking.PhaseContext;
 import org.spongepowered.common.event.tracking.PhaseData;
 import org.spongepowered.common.event.tracking.PhaseTracker;
 import org.spongepowered.common.event.tracking.TrackingUtil;
+import org.spongepowered.common.event.tracking.context.BlockPosMultiMap;
 import org.spongepowered.common.event.tracking.phase.entity.EntityPhase;
 import org.spongepowered.common.event.tracking.phase.entity.TeleportingContext;
 import org.spongepowered.common.interfaces.IMixinPlayerList;
@@ -440,7 +441,7 @@ public final class EntityUtil {
             final MoveEntityEvent.Teleport.Portal event = SpongeEventFactory.createMoveEntityEventTeleportPortal(frame.getCurrentCause(), fromTransform, portalExitTransform, (PortalAgent) teleporter, mixinEntity, true);
             SpongeImpl.postEvent(event);
             final Vector3i chunkPosition = mixinEntity.getLocation().getChunkPosition();
-            final List<BlockSnapshot> capturedBlocks = context.getCapturedBlocks();
+            final BlockPosMultiMap blockSupplier = context.getCapturedBlockSupplier();
             final Transform<World> toTransform = event.getToTransform();
 
             if (event.isCancelled()) {
@@ -451,12 +452,8 @@ public final class EntityUtil {
                     if (teleporter instanceof IMixinTeleporter) {
                         ((IMixinTeleporter) teleporter).removePortalPositionFromCache(ChunkPos.asLong(chunkPosition.getX(), chunkPosition.getZ()));
                     }
-                    if (!capturedBlocks.isEmpty()) {
-                        for (BlockSnapshot original : Lists.reverse(capturedBlocks)) {
-                            original.restore(true, BlockChangeFlags.NONE);
-                        }
-                        capturedBlocks.clear();
-                    }
+                    blockSupplier.restoreOriginals();
+
                     mixinEntity.setLocationAndAngles(fromTransform);
                 } else {
                     // Call setTransform to let plugins know mods changed the position
@@ -478,12 +475,8 @@ public final class EntityUtil {
                     }
 
                     // Undo created portal
-                    if (!capturedBlocks.isEmpty()) {
-                        for (BlockSnapshot original : Lists.reverse(capturedBlocks)) {
-                            original.restore(true, BlockChangeFlags.NONE);
-                        }
-                    }
-                    capturedBlocks.clear();
+                    blockSupplier.restoreOriginals();
+
                     mixinEntity.setLocationAndAngles(toTransform);
                     return event;
                 }
@@ -494,7 +487,7 @@ public final class EntityUtil {
                 }
             }
 
-            if (teleporter instanceof IMixinTeleporter && !capturedBlocks.isEmpty() && !TrackingUtil.processBlockCaptures(capturedBlocks, EntityPhase.State.CHANGING_DIMENSION, context)) {
+            if (teleporter instanceof IMixinTeleporter && !blockSupplier.isEmpty() && !TrackingUtil.processBlockCaptures(blockSupplier, EntityPhase.State.CHANGING_DIMENSION, context)) {
                 ((IMixinTeleporter) teleporter).removePortalPositionFromCache(ChunkPos.asLong(chunkPosition.getX(), chunkPosition.getZ()));
             }
 
